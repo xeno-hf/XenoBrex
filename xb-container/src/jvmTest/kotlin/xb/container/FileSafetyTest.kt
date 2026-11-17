@@ -189,10 +189,33 @@ class FileSafetyTest {
             val target = SafeFiles.resolveMember(root, "future/notes.txt")
             assertTrue(target.startsWith(root))
             if (Files.getFileAttributeView(root, PosixFileAttributeView::class.java) != null) {
-                Files.createSymbolicLink(root.resolve("future"), outside)
-                assertFailsWith<IOException> { SafeFiles.resolveMember(root, "future/notes.txt") }
+                val link = Files.createSymbolicLink(root.resolve("future"), outside)
+                // 用 root 跑時連結也歸 root，會被當成系統連結放行，這個檢查不適用
+                if (uid(link) != 0) assertFailsWith<IOException> { SafeFiles.resolveMember(root, "future/notes.txt") }
             }
         } finally { root.toFile().deleteRecursively(); outside.toFile().deleteRecursively() }
+    }
+
+    private fun uid(p: java.nio.file.Path): Int? =
+        runCatching { Files.getAttribute(p, "unix:uid", java.nio.file.LinkOption.NOFOLLOW_LINKS) as Int }.getOrNull()
+
+    /** 系統本身的連結（root 擁有，例如 macOS 的 /var、合併 /usr 後的 /bin）可以經過；使用者自己的連結照擋（上一個測試）。 */
+    @Test fun rootOwnedSystemLinksAreAllowed() {
+        val system = listOf("/var", "/tmp", "/home", "/bin", "/lib").map { java.nio.file.Path.of(it) }
+            .firstOrNull { Files.isSymbolicLink(it) && uid(it) == 0 }
+        if (system == null) { println("rootOwnedSystemLinksAreAllowed: no root-owned system link on this host, skipped"); return }
+        assertTrue(SafeFiles.resolveMember(system, "future/notes.txt").startsWith(system))
+    }
+
+    /** 自己建的連結就算指向 root 的資料夾也要擋：看的是連結本身的擁有者，不是它指向的地方。 */
+    @Test fun userLinkToARootDirectoryIsRefused() {
+        val root = Files.createTempDirectory("xb-link-")
+        try {
+            if (Files.getFileAttributeView(root, PosixFileAttributeView::class.java) == null) return
+            val link = Files.createSymbolicLink(root.resolve("sys"), java.nio.file.Path.of("/usr"))
+            if (uid(link) == 0) return
+            assertFailsWith<IOException> { SafeFiles.resolveMember(root, "sys/notes.txt") }
+        } finally { root.toFile().deleteRecursively() }
     }
 
     @Test fun definitionInstallationRejectsWindowsCaseCollisions() {

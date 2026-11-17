@@ -78,7 +78,7 @@ object SafeFiles {
         if (!Files.exists(dir, NOFOLLOW_LINKS)) {
             dir.parent?.let { parent ->
                 if (!Files.exists(parent, NOFOLLOW_LINKS)) ensurePrivateDirectory(parent)
-                if (Files.isSymbolicLink(parent)) throw IOException("Refusing a symbolic-link directory")
+                if (untrustedLink(parent)) throw IOException("Refusing a symbolic-link directory")
             }
             val posix = Files.getFileAttributeView(dir.parent, PosixFileAttributeView::class.java) != null
             try {
@@ -95,9 +95,21 @@ object SafeFiles {
     private fun requireNoSymlinkParents(dir: Path) {
         var current: Path? = dir
         while (current != null) {
-            if (Files.isSymbolicLink(current)) throw IOException("Refusing a symbolic-link directory")
+            if (untrustedLink(current)) throw IOException("Refusing a symbolic-link directory")
             current = current.parent
         }
+    }
+
+    /**
+     * 拒絕使用者能動的符號連結。root 擁有的連結放行，當作管理者設好的系統路徑別名（macOS 的 /var、/tmp，
+     * Fedora Atomic 的 /home），否則這些系統的暫存區與家目錄完全存不了檔。這是信任假設，不是保證：
+     * 一般使用者建不出 root 擁有的連結，但這裡不檢查連結所在的資料夾能不能被改、也不追連結指向的路徑，
+     * 指向的位置是否可信交給管理者。讀不到 uid 的檔案系統（Windows）照舊全擋。
+     */
+    private fun untrustedLink(path: Path): Boolean {
+        if (!Files.isSymbolicLink(path)) return false
+        val uid = try { Files.getAttribute(path, "unix:uid", NOFOLLOW_LINKS) as? Int } catch (e: Exception) { null }
+        return uid != 0
     }
 
     private fun privatePermissions(path: Path, directory: Boolean) {
@@ -148,7 +160,7 @@ object SafeFiles {
             requireNoSymlinkParents(dir)
             Files.createDirectories(dir)
         }
-        if (Files.isSymbolicLink(dir)) throw IOException("Refusing a symbolic-link directory")
+        if (untrustedLink(dir)) throw IOException("Refusing a symbolic-link directory")
         val posix = Files.getFileAttributeView(dir, PosixFileAttributeView::class.java) != null
         val tmp = if (posix) Files.createTempFile(dir, ".xb-", ".tmp", PosixFilePermissions.asFileAttribute(filePermissions))
             else Files.createTempFile(dir, ".xb-", ".tmp")
