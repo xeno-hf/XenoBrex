@@ -6,6 +6,10 @@ A desktop tuning tool for aRacer RC X series ECUs (Windows / macOS / Linux): ope
 
 **Unofficial** third-party tool, not affiliated with aRacer. It never changes passwords or flashes firmware.
 
+![Map crosshair following live data](docs/screenshots/map-crosshair.png)
+
+<sub>ReX on a phone, connected to the bike, sends live data to the computer; the crosshair follows the cell the engine is running in.</sub>
+
 ## Features
 
 - Open, edit, compare and save tune files (AMX / ASX / AMX2…): add, multiply, set, LINEAR, SMOOTH, undo; raw values can be edited directly
@@ -18,11 +22,15 @@ A desktop tuning tool for aRacer RC X series ECUs (Windows / macOS / Linux): ope
 - Command-line tool `xbrex` (English), installed together with the desktop app: version/vehicle conversion, `.xbl` inspection and export, ECU read-back and backups
 - English, Traditional Chinese, Simplified Chinese, Japanese
 
+| Traditional Chinese | Function page |
+|---|---|
+| ![Map crosshair, Traditional Chinese](docs/screenshots/map-crosshair-zh.png) | ![Idle function page](docs/screenshots/function-page.png) |
+
 ## Install
 
-Source is available now; the Windows `.msi`, macOS (Apple Silicon) `.dmg` and Linux `.tar.gz` installers are being prepared and will be published on [Releases](https://github.com/xeno-hf/XenoBrex/releases/latest).
+Download an installer from [Releases](https://github.com/xeno-hf/XenoBrex/releases/latest): Windows `.msi`, macOS (Apple Silicon) `.dmg`, Linux `.tar.gz` (unpack and run `install.sh`).
 
-Install from source (needs JDK 21):
+Or install from source (needs JDK 21):
 
 ```sh
 git clone https://github.com/xeno-hf/XenoBrex.git
@@ -30,7 +38,7 @@ cd XenoBrex
 ./install.sh
 ```
 
-The installers will not be signed; Windows and macOS will ask you to allow them on first launch.
+The installers are not signed; Windows and macOS will ask you to allow them on first launch.
 
 ## Definition files and keys
 

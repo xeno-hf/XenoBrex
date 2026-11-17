@@ -6,6 +6,10 @@ aRacer RC X 系列 ECU 的桌面版調校工具（Windows／macOS／Linux）：�
 
 **非官方**第三方工具，與 aRacer 無關。不改密碼、不燒錄韌體。
 
+![油圖準星跟著即時資料移動](docs/screenshots/map-crosshair-zh.png)
+
+<sub>手機 ReX 連著車、把即時資料傳到電腦，油圖上的準星跟著引擎目前所在的格子走。</sub>
+
 ## 功能
 
 - 開啟、編輯、比較、另存調校檔（AMX／ASX／AMX2…）：加減乘除、設值、LINEAR、SMOOTH、復原；可改原始值
@@ -18,11 +22,15 @@ aRacer RC X 系列 ECU 的桌面版調校工具（Windows／macOS／Linux）：�
 - 命令列工具 `xbrex`（英文），和桌面版裝在一起：轉換版本／車種、檢查與匯出 `.xbl`、連線讀回與備份
 - 介面：English、繁體中文、简体中文、日本語
 
+| 油圖與準星（English） | 功能專頁 |
+|---|---|
+| ![油圖準星（英文介面）](docs/screenshots/map-crosshair.png) | ![怠速功能專頁](docs/screenshots/function-page.png) |
+
 ## 安裝
 
-目前先提供原始碼；Windows `.msi`、macOS（Apple Silicon）`.dmg`、Linux `.tar.gz` 安裝檔正在準備，完成後會放到 [Releases](https://github.com/xeno-hf/XenoBrex/releases/latest)。
+到 [Releases](https://github.com/xeno-hf/XenoBrex/releases/latest) 下載安裝檔：Windows `.msi`、macOS（Apple Silicon）`.dmg`、Linux `.tar.gz`（解開後執行 `install.sh`）。
 
-從原始碼安裝（需要 JDK 21）：
+或從原始碼安裝（需要 JDK 21）：
 
 ```sh
 git clone https://github.com/xeno-hf/XenoBrex.git
@@ -30,7 +38,7 @@ cd XenoBrex
 ./install.sh
 ```
 
-之後提供的安裝檔不會簽章，Windows 和 macOS 第一次開啟要手動放行。
+安裝檔沒有簽章，Windows 和 macOS 第一次開啟要手動放行。
 
 ## 定義檔與金鑰
 
