@@ -210,12 +210,17 @@ class FileSafetyTest {
     /** 自己建的連結就算指向 root 的資料夾也要擋：看的是連結本身的擁有者，不是它指向的地方。 */
     @Test fun userLinkToARootDirectoryIsRefused() {
         val root = Files.createTempDirectory("xb-link-")
+        val link = root.resolve("sys")
         try {
             if (Files.getFileAttributeView(root, PosixFileAttributeView::class.java) == null) return
-            val link = Files.createSymbolicLink(root.resolve("sys"), java.nio.file.Path.of("/usr"))
+            Files.createSymbolicLink(link, java.nio.file.Path.of("/usr"))
             if (uid(link) == 0) return
             assertFailsWith<IOException> { SafeFiles.resolveMember(root, "sys/notes.txt") }
-        } finally { root.toFile().deleteRecursively() }
+        } finally {
+            // 先拿掉連結本身：deleteRecursively 會跟著資料夾連結走進 /usr
+            Files.deleteIfExists(link)
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test fun definitionInstallationRejectsWindowsCaseCollisions() {

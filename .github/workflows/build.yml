@@ -97,8 +97,19 @@ jobs:
 
 
       # createDistributable：還沒包成安裝檔的程式資料夾，下面的自我檢查和開視窗用它。
+      # macOS 的 hdiutil 在 GitHub 的機器上偶爾會失敗：失敗時先印出 jpackage 的紀錄，再試一次。
       - name: Package
-        run: ./gradlew --console=plain :xb-app:createDistributable :xb-app:${{ matrix.task }}
+        shell: bash
+        run: |
+          tasks=":xb-app:createDistributable :xb-app:${{ matrix.task }}"
+          ./gradlew --console=plain $tasks && exit 0
+          for f in xb-app/build/compose/logs/*/*.txt; do
+            [ -f "$f" ] || continue
+            echo "== $f"
+            cat "$f" || true
+          done
+          sleep 15
+          ./gradlew --console=plain $tasks
 
       # 用打包好的程式（不是測試用的 Java）把示範檔開起來、原樣存回去、改一格再存。
       - name: Self-check with the packaged app
