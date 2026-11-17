@@ -183,7 +183,8 @@ class EcuWriteSafetyTest {
                 assertTrue(f.state.editingFrozen)
                 f.state.setRaw(1, Cell(0, 0), 99, "must be frozen")
                 assertEquals(10L, f.state.tune!!.rows(1)!![0][0])
-                withTimeout(10_000) { while (f.state.ecu is EcuPhase.Writing) delay(5) }
+                // 寫完先等 2 秒再讀回，讀不到的表每張重試（Amc.write settleMs／readAttempts），全讀不到要比 10 秒久
+                withTimeout(60_000) { while (f.state.ecu is EcuPhase.Writing) delay(5) }
                 assertIs<EcuPhase.Recovery>(f.state.ecu)
                 assertTrue(p.live.closed)
                 assertFalse(p.link.open.value)

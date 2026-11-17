@@ -26,7 +26,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.ContinuationInterceptor
 import xb.tune.Tune
 import xb.tune.Convert
 import xb.link.TableRead
@@ -405,12 +407,23 @@ class EcuController(
         val tune = state.tune ?: return
         val def = tune.definition(absId) ?: return
         scope.launch {
-            liveOperation(p) { l.readTable(absId) }.onSuccess { rows ->
-                val changed = !tune.rows(absId)!!.let { cur -> cur.size == rows.size && cur.indices.all { cur[it].contentEquals(rows[it]) } }
-                if (!tune.loadRows(absId, rows, undoable = true)) { state.message = tr("msg.readTableFailed", state.title(def), "size"); return@onSuccess }
-                state.contentChanged()
-                state.message = tr(if (changed) "msg.readTable" else "msg.readTable.same", state.title(def))
-            }.onFailure { state.message = tr("msg.readTableFailed", state.title(def), it.message) }
+            var changed = false
+            val ui = currentCoroutineContext()[ContinuationInterceptor]!!
+            // 換進編輯器在即時寫入的鎖裡做（清除學習值後鎖住的表這樣才解開），回畫面的執行緒改
+            // 讀不到（逾時、斷線）或換不進編輯器會丟例外：一樣報成讀表失敗（表若鎖著就維持鎖著）
+            val r = try {
+                liveOperation(p) {
+                    l.readTable(absId) { rows ->
+                        withContext(ui) {
+                            changed = !tune.rows(absId)!!.let { cur -> cur.size == rows.size && cur.indices.all { cur[it].contentEquals(rows[it]) } }
+                            check(tune.loadRows(absId, rows, undoable = true)) { "size" }
+                            state.contentChanged()
+                        }
+                    }
+                }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+            r.onSuccess { state.message = tr(if (changed) "msg.readTable" else "msg.readTable.same", state.title(def)) }
+                .onFailure { state.message = tr("msg.readTableFailed", state.title(def), it.message) }
         }
     }
 

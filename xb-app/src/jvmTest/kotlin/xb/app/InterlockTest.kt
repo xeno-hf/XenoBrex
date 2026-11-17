@@ -65,10 +65,12 @@ class InterlockTest {
         override fun has(absId: Int) = absId !in unreadable && tune.rows(absId) != null
         override fun writable(absId: Int) = has(absId)
         override fun status(absId: Int): LiveTuning.TableState? = null
+        override fun held(absId: Int) = false
         override fun edited(absId: Int) {}
         override suspend fun readTables(ids: List<Int>): String? = null
         override suspend fun writeTables(ids: List<Int>): String? { written += ids; return null }
         override suspend fun command(index: Int, sub: Int, value: Long, bytes: Int): String? = "no"
+        override suspend fun commandThenRead(index: Int, sub: Int, value: Long, bytes: Int, ids: List<Int>, settleMs: Long) = LiveTuning.CommandRead.notSent("no")
         override suspend fun readObject(index: Int, sub: Int): Result<ByteArray> = Result.failure(IllegalStateException())
         override suspend fun raw(canId: Int, data: ByteArray, reply: Int?, count: Int, timeoutMs: Long, match: (ByteArray) -> Boolean): Result<List<ByteArray>> = Result.failure(IllegalStateException())
         override fun watch(vars: List<Int>) {}

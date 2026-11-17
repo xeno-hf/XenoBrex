@@ -16,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.ContinuationInterceptor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import xb.calui.CalColors
@@ -77,19 +80,24 @@ private class XbCalHost(
 
     override fun writable(absId: Int): Boolean = !state.editingFrozen && if (phase != null) active && phase.live.writable(absId) else state.tune?.definition(absId) != null
     override fun status(absId: Int): LiveTuning.TableState? = states.value[absId]
+    override fun held(absId: Int): Boolean = phase?.live?.held?.value?.contains(absId) == true
 
     override fun edited(absId: Int) { state.ecuControl.edited(absId); state.contentChanged() }
 
     override suspend fun readTables(ids: List<Int>): String? {
         val p = phase?.takeIf { active } ?: return tr("ecu.readOnly")
         val l = p.live
+        val ui = currentCoroutineContext()[ContinuationInterceptor]!!
         return state.ecuControl.liveOperation(p) {
-            for (id in ids) {
-                val rows = l.readTable(id).getOrElse { return@liveOperation "${state.title(tune.definition(id)!!)}: ${it.message}" }
-                tune.loadRows(id, rows, undoable = true)
+            // 每張都讀（一張失敗不跳過下一張），錯誤合在一起回報
+            val errors = ids.mapNotNull { id ->
+                // 換進編輯器在即時寫入的鎖裡做（命令後鎖住的表這樣才解開），回畫面的執行緒改
+                val r = try {
+                    l.readTable(id) { rows -> withContext(ui) { check(tune.loadRows(id, rows, undoable = true)) { "ECU rows do not fit the tune" }; state.contentChanged() } }
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+                r.exceptionOrNull()?.let { "${state.title(tune.definition(id)!!)}: ${it.message}" }
             }
-            state.contentChanged()
-            null
+            errors.takeIf { it.isNotEmpty() }?.joinToString("; ")
         }
     }
 
@@ -115,6 +123,20 @@ private class XbCalHost(
         val r = state.ecuControl.liveOperation(phase) { link.calCommand(CalCommands.sdoFrame(index, sub, value, bytes)) }
         state.ecuLog("Cal command 0x${index.toString(16)}/$sub=0x${value.toString(16)}: ${r ?: "ACK"}")
         return r
+    }
+
+    override suspend fun commandThenRead(index: Int, sub: Int, value: Long, bytes: Int, ids: List<Int>, settleMs: Long): LiveTuning.CommandRead {
+        val p = phase?.takeIf { active } ?: return LiveTuning.CommandRead.notSent(xb.calui.CalText.get("cal_need_online", calLang()))
+        if (!CalCommands.writeAllowed(index, sub, value, bytes)) return LiveTuning.CommandRead.notSent("command not allowed")
+        val frame = CalCommands.sdoFrame(index, sub, value, bytes)
+        val ui = currentCoroutineContext()[ContinuationInterceptor]!!
+        val tune = state.tune!!
+        // 工作開在 LiveTuning 上：離開頁面也會做完；整包寫入前停止即時調校會中斷它，沒重讀的表標成沒確定
+        return state.ecuControl.liveOperation(p) {
+            p.live.commandThenRead(ids, settleMs, command = {
+                p.link.calCommand(frame).also { state.ecuLog("Cal command 0x${index.toString(16)}/$sub=0x${value.toString(16)}: ${it ?: "ACK"}") }
+            }) { id, rows -> withContext(ui) { check(tune.loadRows(id, rows, undoable = true)) { "ECU rows do not fit the tune" }; state.contentChanged() } }
+        }.also { r -> r.failed.forEach { (id, why) -> state.ecuLog("Re-read table $id after the command failed: $why") } }
     }
 
     override suspend fun readObject(index: Int, sub: Int): Result<ByteArray> {

@@ -456,6 +456,8 @@ class AppState(
         return when (item.page) {
             xb.tune.CalItems.Page.IdleAdj, xb.tune.CalItems.Page.TpsLearn, xb.tune.CalItems.Page.RgbLed, xb.tune.CalItems.Page.Service -> online
             xb.tune.CalItems.Page.Backfire -> has(42) || has(1569)
+            // 清除學習值：要連著 ECU，而且兩張學習表都在（清完要重讀它們；同 xb-calui 的 usable）
+            xb.tune.CalItems.Page.ClearLearn -> online && xb.tune.CalItems.CLEAR_LEARN_TABLES.all(::has)
             else -> item.tables.any(::has)
         }
     }
@@ -483,8 +485,19 @@ class AppState(
         }
     }
 
+    /**
+     * 即時調校鎖著等重讀的表（清除學習值之後，[xb.link.LiveTuning.held]）：編輯器不讓改，
+     * 否則改的值不會送、重讀後又被蓋掉。[absId] 為 null＝任何一張鎖著（復原不知道會動到哪張）。
+     */
+    private fun liveLocked(absId: Int?): Boolean {
+        val held = (ecu as? EcuPhase.Live)?.live?.held?.value ?: return false
+        val locked = if (absId == null) held.isNotEmpty() else absId in held
+        if (locked) message = tr("msg.tableLocked")
+        return locked
+    }
+
     fun apply(op: Op) {
-        if (editingFrozen) return
+        if (editingFrozen || liveLocked(selectedTable)) return
         val t = tune ?: return
         val def = selectedTable?.let { t.definition(it) } ?: return
         val sel = selection ?: run { message = tr("msg.selectFirst"); return }
@@ -527,7 +540,7 @@ class AppState(
     }
 
     fun typeChar(ch: Char) {
-        if (editingFrozen) return
+        if (editingFrozen || liveLocked(selectedTable)) return
         val cur = entry ?: ""
         if (cur.length >= 12) return
         if (ch == '-' && cur.isNotEmpty()) return
@@ -539,7 +552,7 @@ class AppState(
 
     /** 把打的數字放進選取的格子（選了一片就整片都設成這個值）。回傳是否成功。 */
     fun commitEntry(): Boolean {
-        if (editingFrozen) return false
+        if (editingFrozen || liveLocked(selectedTable)) { entry = null; return false }
         val text = entry ?: return true
         entry = null
         if (text.isEmpty()) return true
@@ -574,7 +587,7 @@ class AppState(
      * 只有一個數字時填滿選取範圍；否則從選取的左上角開始放，超出表的部分略過。
      */
     fun pasteText(text: String) {
-        if (editingFrozen) return
+        if (editingFrozen || liveLocked(selectedTable)) return
         val t = tune ?: return
         val def = selectedTable?.let { t.definition(it) } ?: return
         val sel = selection?.takeIf { it.target == SelTarget.Body } ?: run { message = tr("msg.pasteWhere"); return }
@@ -598,13 +611,13 @@ class AppState(
     }
 
     fun setRaw(absId: Int, cell: Cell, raw: Long, what: String) {
-        if (editingFrozen) return
+        if (editingFrozen || liveLocked(absId)) return
         val t = tune ?: return
         done(t.setRaw(absId, cell, raw), what, absId)
     }
 
     fun undo() {
-        if (editingFrozen) return
+        if (editingFrozen || liveLocked(null)) return
         val t = tune ?: return
         val id = t.undo()
         if (id == null) { message = tr("msg.nothingToUndo"); return }
@@ -614,7 +627,7 @@ class AppState(
     }
 
     fun revertTable() {
-        if (editingFrozen) return
+        if (editingFrozen || liveLocked(selectedTable)) return
         val t = tune ?: return
         val id = selectedTable ?: return
         if (!t.isModified(id)) { message = tr("msg.notModified"); return }
@@ -625,7 +638,7 @@ class AppState(
 
     /** 選取的格子（或整張表）改用比較對象的值。 */
     fun takeFromOther(wholeTable: Boolean) {
-        if (editingFrozen) return
+        if (editingFrozen || liveLocked(selectedTable)) return
         val t = tune ?: return
         val o = other ?: return
         val id = selectedTable ?: return

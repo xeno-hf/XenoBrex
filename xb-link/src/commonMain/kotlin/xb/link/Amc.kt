@@ -1,6 +1,8 @@
 package xb.link
 
+import kotlinx.coroutines.delay
 import rx.protocol.CanId
+import rx.protocol.IOException
 import rx.protocol.Frame
 import rx.protocol.hexLower
 import xb.tune.TableDef
@@ -222,10 +224,21 @@ object Amc {
      * 寫進 ECU。ECU 拒絕或逾時就丟 [AmcException]，不重試、不自動回滾。
      * 寫到一半斷掉時，ECU 上的校正可能是不完整的：要用備份再寫一次。
      * 全程獨占連線，先重新確認 ECU 身分，最後完整讀回；讀不到或不同都算失敗。
+     * 最後一塊收下後 ECU 還在處理（XTune 這時等約 2 秒才斷線，讀回留到重連），
+     * 所以先等 [settleMs]，讀回時每張表逾時或讀不到最多重讀 [readAttempts] 次。
      * [onProgress]（已確認的塊數、總塊數）。回傳驗證完成的讀回。
      */
-    suspend fun write(link: EcuLink, p: Packed, paceMs: Long = 4, blockTimeoutMs: Long = 10_000, log: (String) -> Unit = {},
-                      onProgress: (Int, Int) -> Unit = { _, _ -> }): Snapshot = link.amcExclusive {
+    suspend fun write(link: EcuLink, p: Packed, paceMs: Long = 4, blockTimeoutMs: Long = 10_000, settleMs: Long = 2_000,
+                      readAttempts: Int = 4, retryDelayMs: Long = 1_000, log: (String) -> Unit = {},
+                      onProgress: (Int, Int) -> Unit = { _, _ -> }): Snapshot {
+        // 參數不合理要在寫任何東西之前擋下（不能寫完整份才在讀回時發現）
+        require(paceMs >= 0 && blockTimeoutMs > 0 && settleMs >= 0 && readAttempts >= 1 && retryDelayMs >= 0) { "invalid AMC write timing" }
+        return writeChecked(link, p, paceMs, blockTimeoutMs, settleMs, readAttempts, retryDelayMs, log, onProgress)
+    }
+
+    private suspend fun writeChecked(link: EcuLink, p: Packed, paceMs: Long, blockTimeoutMs: Long, settleMs: Long,
+                                     readAttempts: Int, retryDelayMs: Long, log: (String) -> Unit,
+                                     onProgress: (Int, Int) -> Unit): Snapshot = link.amcExclusive {
         try {
             check(link.wholeImageEnabled) { "whole-image writes require a complete verified backup" }
             val reason = EcuSync.compatibility(EcuSync.identity(link), link.platform, p.expected)
@@ -253,10 +266,19 @@ object Amc {
                 if (!ok) throw AmcException("Block ${i + 1}/${p.blocks} rejected (${r.data.hexLower(" ")}; the calibration on the ECU may be incomplete; write again from the backup)")
                 onProgress(i + 1, p.blocks)
             }
-            val after = EcuSync.readAll(link, p.expected)
+            log("AMC write accepted: ${p.blocks} blocks; verifying after $settleMs ms")
+            delay(settleMs)
+            val after = try {
+                EcuSync.readAll(link, p.expected, readAttempts, retryDelayMs, log)
+            } catch (e: IOException) {
+                throw AmcException("The ECU accepted all ${p.blocks} blocks, but the read-back failed: ${e.message}")
+            }
             val differences = EcuSync.differences(after, p.expected)
             if (!after.complete || differences.isNotEmpty()) {
-                throw AmcException("Full verification failed: ${after.failed.size} unreadable tables, ${differences.size} differing tables")
+                after.failed.forEach { log("Unreadable after write: ${it.def.name} (table ${it.def.absId}): ${it.reason}") }
+                differences.forEach { log("Differs after write: ${it.def.name} (table ${it.def.absId})") }
+                val names = (after.failed.map { it.def.name } + differences.map { it.def.name }).take(5).joinToString()
+                throw AmcException("Full verification failed: ${after.failed.size} unreadable tables, ${differences.size} differing tables ($names)")
             }
             log("AMC write verified: ${after.ok.size} tables, ${p.blocks} blocks")
             after

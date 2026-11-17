@@ -219,10 +219,14 @@ fun TableEditor(state: AppState, clipboard: ClipboardBridge, modifier: Modifier 
                     Spacer(Modifier.width(8.dp))
                 }
                 ToolButton(tr("editor.revert"), tr("editor.revert.hint"), enabled = tune.isModified(def.absId)) { state.revertTable() }
-                if (state.ecuControl.live?.writable(def.absId) == true) {
+                val liveNow = state.ecuControl.live
+                val canWrite = liveNow?.writable(def.absId) == true
+                // 鎖著等重讀的表（清除學習值後）：全讀照樣能按（讀成功才解開），全寫不給
+                val heldNow = liveNow?.held?.collectAsState()?.value?.contains(def.absId) == true
+                if (canWrite || heldNow) {
                     Spacer(Modifier.width(8.dp))
                     ToolButton(tr("editor.readAll"), tr("editor.readAll.hint"), tag = "readAll") { state.ecuControl.readTable(scope, def.absId) }
-                    ToolButton(tr("editor.writeAll"), tr("editor.writeAll.hint"), tag = "writeAll") { state.ecuControl.writeTable(scope, def.absId) }
+                    if (canWrite) ToolButton(tr("editor.writeAll"), tr("editor.writeAll.hint"), tag = "writeAll") { state.ecuControl.writeTable(scope, def.absId) }
                 }
                 if (state.other != null && state.diffKind(def.absId) == DiffKind.Different) {
                     Spacer(Modifier.width(8.dp))
