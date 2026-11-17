@@ -84,7 +84,7 @@ class PairingAndRevocationTest {
         val result = CompletableFuture<Any>()
         val worker = thread(isDaemon = true) {
             try {
-                result.complete(SyncWire.accept(serverIn, serverOut, SyncWire.Identity("0123456789abcdef01234567", "XB"), { null }, { window }))
+                result.complete(SyncWire.accept(serverIn, serverOut, SyncWire.Identity("0123456789abcdef01234567", "XB"), { null }, { window }, { }))
             } catch (e: Throwable) {
                 result.complete(e)
             }
