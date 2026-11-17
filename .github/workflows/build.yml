@@ -220,7 +220,8 @@ jobs:
           set -eu
           {
             dmg=$(ls ${{ matrix.installer }})
-            hdiutil attach "$dmg" -nobrowse -mountpoint /Volumes/XenoBrexCheck
+            # DMG 帶授權條款，掛載前會問同不同意：自動回答同意（使用者雙擊時看到的是同一份條款）
+            PAGER=cat hdiutil attach "$dmg" -nobrowse -mountpoint /Volumes/XenoBrexCheck <<< "Y"
             ls -la /Volumes/XenoBrexCheck
             test -d /Volumes/XenoBrexCheck/XenoBrex.app
             # 「Applications」是 Finder 的替身檔（不是符號連結），拖到它上面就是放進 /Applications。
@@ -243,7 +244,7 @@ jobs:
         continue-on-error: true
         run: |
           dmg=$(ls ${{ matrix.installer }})
-          hdiutil attach "$dmg"
+          PAGER=cat hdiutil attach "$dmg" <<< "Y"
           sleep 3
           open /Volumes/XenoBrex
           sleep 12
