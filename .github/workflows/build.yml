@@ -1,0 +1,317 @@
+name: Build
+
+# 每次推上來或開 PR：在 Linux 上建置並跑測試。
+# 手動執行（Run workflow）：另外在 macOS、Windows、Linux 上各打包一份，並實際裝起來檢查。
+#   macOS   .dmg（打開後把 XenoBrex 拖進 Applications）
+#   Windows .msi（安裝時可以選要不要建桌面捷徑）
+#   Linux   .tar.gz（解開後跑 install.sh；或直接在原始碼裡跑 install.sh）
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  # 自動測試與自我檢查用 sample/ 裡自己編的示範檔；不需要金鑰，也沒有任何實際的定義檔。
+  XB_DEFINITIONS: ${{ github.workspace }}/sample/definitions
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 (v7.0.1)
+
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6 (v6.3.0)
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      # 中文字型：畫面出圖要用，沒有的話中文會變成方框。
+      - name: Fonts
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+
+      - name: Build and test
+        run: ./gradlew --console=plain build
+
+      - name: Shots and test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7 (v7.0.2)
+        with:
+          name: test-linux
+          path: |
+            xb-app/build/shots/*.png
+            */build/reports/tests/
+          retention-days: 7
+
+  package:
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-26
+            name: macos-arm64
+            task: packageDmg
+            app: xb-app/build/compose/binaries/main/app/XenoBrex.app/Contents/MacOS/XenoBrex
+            installer: xb-app/build/compose/binaries/main/dmg/*.dmg
+          - os: windows-latest
+            name: windows-x64
+            task: packageMsi
+            app: xb-app/build/compose/binaries/main/app/XenoBrex/XenoBrex.exe
+            installer: xb-app/build/compose/binaries/main/msi/*.msi
+          - os: ubuntu-latest
+            name: linux-x64
+            task: packageTarGz
+            app: xb-app/build/compose/binaries/main/app/XenoBrex/bin/XenoBrex
+            installer: xb-app/build/dist/*.tar.gz
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 (v7.0.1)
+
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6 (v6.3.0)
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Fonts
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
+
+      # macOS 上這一步也會把共用的調校檔核心編成 iOS 的版本。
+      - name: Build and test
+        run: ./gradlew --console=plain build
+
+
+      # createDistributable：還沒包成安裝檔的程式資料夾，下面的自我檢查和開視窗用它。
+      - name: Package
+        run: ./gradlew --console=plain :xb-app:createDistributable :xb-app:${{ matrix.task }}
+
+      # 用打包好的程式（不是測試用的 Java）把示範檔開起來、原樣存回去、改一格再存。
+      - name: Self-check with the packaged app
+        if: runner.os != 'Windows'
+        run: |
+          "${{ matrix.app }}" --selfcheck "$PWD/sample/Demo.amx" "$PWD/selfcheck-${{ matrix.name }}.txt"
+          cat selfcheck-${{ matrix.name }}.txt
+
+      - name: Self-check with the packaged app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $report = Join-Path $PWD "selfcheck-${{ matrix.name }}.txt"
+          $p = Start-Process -FilePath (Resolve-Path "${{ matrix.app }}") -ArgumentList "--selfcheck", (Resolve-Path "sample/Demo.amx"), $report -Wait -PassThru
+          Get-Content $report
+          exit $p.ExitCode
+
+      # 真的把視窗開起來拍一張。拍不到不算失敗（要看執行環境給不給拍）。
+      - name: Window screenshot (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          "${{ matrix.app }}" "$PWD/sample/Demo.amx" > app-window.log 2>&1 &
+          pid=$!
+          sleep 25
+          screencapture -x window-${{ matrix.name }}.png
+          kill $pid || true
+          cat app-window.log || true
+
+      - name: Window screenshot (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath (Resolve-Path "${{ matrix.app }}") -ArgumentList (Resolve-Path "sample/Demo.amx") -PassThru
+          Start-Sleep -Seconds 25
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("window-${{ matrix.name }}.png")
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+
+      # 檔名用真正的版本和系統名稱（macOS 的安裝檔內部版本另有規定，見 xb-app/build.gradle.kts）。
+      - name: Name the installer
+        run: |
+          v=$(grep '^xb.version=' gradle.properties | cut -d= -f2)
+          case "${{ matrix.name }}" in
+            macos-arm64) mv xb-app/build/compose/binaries/main/dmg/*.dmg "xb-app/build/compose/binaries/main/dmg/XenoBrex-$v-macos-arm64.dmg" ;;
+            windows-x64) mv xb-app/build/compose/binaries/main/msi/*.msi "xb-app/build/compose/binaries/main/msi/XenoBrex-$v-windows-x64.msi" ;;
+          esac
+          ls -l ${{ matrix.installer }}
+
+      # ---- 實際裝起來檢查 ----
+
+      # Linux：解開壓縮檔跑裡面的 install.sh，再從原始碼跑一次 install.sh；兩種裝法都用裝好的指令自我檢查，然後移除。
+      - name: Install check (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -eu
+          {
+            mkdir -p "$RUNNER_TEMP/x" && tar xzf ${{ matrix.installer }} -C "$RUNNER_TEMP/x"
+            top=$(ls "$RUNNER_TEMP/x")
+            echo "== 壓縮檔：$top"
+            test -f "$RUNNER_TEMP/x/$top/LICENSE"
+            test -f "$RUNNER_TEMP/x/$top/OFL-Oxanium.txt"
+            XB_PREFIX="$RUNNER_TEMP/p1" "$RUNNER_TEMP/x/$top/install.sh"
+            "$RUNNER_TEMP/p1/bin/xenobrex" --selfcheck "$PWD/sample/Demo.amx"
+            test -f "$RUNNER_TEMP/p1/share/applications/xenobrex.desktop"
+            test -f "$RUNNER_TEMP/p1/share/icons/hicolor/256x256/apps/xenobrex.png"
+            test -f "$RUNNER_TEMP/p1/lib/xenobrex/lib/app/resources/LICENSE"
+            test -f "$RUNNER_TEMP/p1/lib/xenobrex/.install-manifest"
+            XB_PREFIX="$RUNNER_TEMP/p1" "$RUNNER_TEMP/x/$top/install.sh" --uninstall
+            test ! -e "$RUNNER_TEMP/p1/lib/xenobrex" && test ! -e "$RUNNER_TEMP/p1/bin/xenobrex"
+            test ! -e "$RUNNER_TEMP/p1/share/applications/xenobrex.desktop"
+            test ! -e "$RUNNER_TEMP/p1/share/icons/hicolor/256x256/apps/xenobrex.png"
+            echo "== 原始碼：./install.sh"
+            XB_PREFIX="$RUNNER_TEMP/p2" ./install.sh
+            "$RUNNER_TEMP/p2/bin/xenobrex" --selfcheck "$PWD/sample/Demo.amx"
+            XB_PREFIX="$RUNNER_TEMP/p2" ./install.sh --uninstall
+            echo "== 外來檔案不覆蓋"
+            mkdir -p "$RUNNER_TEMP/p3/bin"
+            printf 'foreign\n' > "$RUNNER_TEMP/p3/bin/xenobrex"
+            if XB_PREFIX="$RUNNER_TEMP/p3" "$RUNNER_TEMP/x/$top/install.sh" >/dev/null 2>&1; then
+              echo "installcheck=FAILED (foreign file was overwritten)"; exit 1
+            fi
+            test "$(cat "$RUNNER_TEMP/p3/bin/xenobrex")" = foreign
+            test ! -e "$RUNNER_TEMP/p3/lib/xenobrex"
+            echo "== 不支援的前綴字元"
+            if XB_PREFIX="$RUNNER_TEMP/bad\"prefix" "$RUNNER_TEMP/x/$top/install.sh" >/dev/null 2>&1; then
+              echo "installcheck=FAILED (unsupported prefix was accepted)"; exit 1
+            fi
+            echo "== 清單外的檔案保留"
+            XB_PREFIX="$RUNNER_TEMP/p4" "$RUNNER_TEMP/x/$top/install.sh"
+            printf 'keep\n' > "$RUNNER_TEMP/p4/lib/xenobrex/user-note.txt"
+            XB_PREFIX="$RUNNER_TEMP/p4" "$RUNNER_TEMP/x/$top/install.sh" --uninstall
+            test "$(cat "$RUNNER_TEMP/p4/lib/xenobrex/user-note.txt")" = keep
+            test ! -e "$RUNNER_TEMP/p4/bin/xenobrex"
+            echo "installcheck=OK"
+          } 2>&1 | tee installcheck-${{ matrix.name }}.txt
+
+      # macOS：把 .dmg 掛起來，看裡面是不是「程式＋Applications 捷徑」，拍下 Finder 開出來的視窗；
+      # 再照使用者的做法把程式複製出來（等於拖進 Applications），用複製出來的那份自我檢查。
+      - name: Install check (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          {
+            dmg=$(ls ${{ matrix.installer }})
+            hdiutil attach "$dmg" -nobrowse -mountpoint /Volumes/XenoBrexCheck
+            ls -la /Volumes/XenoBrexCheck
+            test -d /Volumes/XenoBrexCheck/XenoBrex.app
+            # 「Applications」是 Finder 的替身檔（不是符號連結），拖到它上面就是放進 /Applications。
+            file /Volumes/XenoBrexCheck/Applications
+            test -L /Volumes/XenoBrexCheck/Applications || file /Volumes/XenoBrexCheck/Applications | grep -qi alias
+            test -f /Volumes/XenoBrexCheck/.background/background.tiff
+            mkdir -p "$RUNNER_TEMP/Applications"
+            cp -R /Volumes/XenoBrexCheck/XenoBrex.app "$RUNNER_TEMP/Applications/"
+            /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$RUNNER_TEMP/Applications/XenoBrex.app/Contents/Info.plist"
+            "$RUNNER_TEMP/Applications/XenoBrex.app/Contents/MacOS/XenoBrex" --selfcheck "$PWD/sample/Demo.amx"
+            hdiutil detach /Volumes/XenoBrexCheck
+            echo "installcheck=OK"
+          } 2>&1 | tee installcheck-${{ matrix.name }}.txt
+
+      # 使用者雙擊 .dmg 會看到的那個視窗。拍不到不算失敗。
+      - name: Disk image window screenshot (macOS)
+        if: always() && runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          dmg=$(ls ${{ matrix.installer }})
+          hdiutil attach "$dmg"
+          sleep 3
+          open /Volumes/XenoBrex
+          sleep 12
+          screencapture -x dmg-window-${{ matrix.name }}.png
+          hdiutil detach /Volumes/XenoBrex -force || true
+
+      # Windows：看安裝程式裡有沒有「要不要建捷徑」的勾選框；
+      # 然後不建桌面捷徑裝一次、照預設裝一次，各自檢查捷徑、用裝好的程式自我檢查、再解除安裝。
+      - name: Install check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = Join-Path $PWD "installcheck-${{ matrix.name }}.txt"
+          function Say($s) { $s | Tee-Object -FilePath $out -Append }
+          $msi = (Get-ChildItem "xb-app/build/compose/binaries/main/msi/*.msi")[0].FullName
+          Say "msi=$(Split-Path $msi -Leaf)"
+
+          $inst = New-Object -ComObject WindowsInstaller.Installer
+          $db = $inst.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $inst, @($msi, 0))
+          function Rows($sql, $n) {
+            $v = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @($sql))
+            $v.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $v, $null) | Out-Null
+            $rows = @()
+            while ($true) {
+              $r = $v.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $v, $null)
+              if ($null -eq $r) { break }
+              $rows += ,(1..$n | ForEach-Object { $r.GetType().InvokeMember('StringData', 'GetProperty', $null, $r, $_) })
+            }
+            return $rows
+          }
+          $boxes = Rows "SELECT ``Dialog_``, ``Control``, ``Property`` FROM ``Control`` WHERE ``Type`` = 'CheckBox'" 3
+          foreach ($b in $boxes) { Say "checkbox dialog=$($b[0]) control=$($b[1]) property=$($b[2])" }
+          $desktopProp = ($boxes | Where-Object { $_[2] -match 'DESKTOP' } | Select-Object -First 1)
+          if (-not $desktopProp) { Say "installcheck=FAILED (安裝程式裡沒有桌面捷徑的勾選框)"; exit 1 }
+          $desktopProp = $desktopProp[2]
+
+          $desktop = Join-Path ([Environment]::GetFolderPath('Desktop')) 'XenoBrex.lnk'
+          $menu = Join-Path ([Environment]::GetFolderPath('Programs')) 'XenoBrex\XenoBrex.lnk'
+          $exe = Join-Path $env:LOCALAPPDATA 'XenoBrex\XenoBrex.exe'
+          function Msi($arguments) {
+            $p = Start-Process msiexec -ArgumentList $arguments -Wait -PassThru
+            if ($p.ExitCode -ne 0) { Say "msiexec $arguments -> $($p.ExitCode)"; exit 1 }
+          }
+          function Check($label, $wantDesktop) {
+            Say "== $label"
+            Say "exe=$(Test-Path $exe) desktopShortcut=$(Test-Path $desktop) menuShortcut=$(Test-Path $menu)"
+            Say "shortcutsFound=$((Get-ChildItem ([Environment]::GetFolderPath('Programs')), ([Environment]::GetFolderPath('Desktop')) -Recurse -Filter 'XenoBrex*.lnk' -ErrorAction SilentlyContinue | ForEach-Object FullName) -join ';')"
+            if (-not (Test-Path $exe)) { Say "installcheck=FAILED (沒有裝出程式)"; exit 1 }
+            if ((Test-Path $desktop) -ne $wantDesktop) { Say "installcheck=FAILED (桌面捷徑和選擇不符)"; exit 1 }
+            if (-not (Test-Path $menu)) { Say "installcheck=FAILED (沒有開始功能表捷徑)"; exit 1 }
+            $report = Join-Path $env:RUNNER_TEMP 'selfcheck-installed.txt'
+            $p = Start-Process -FilePath $exe -ArgumentList '--selfcheck', (Resolve-Path 'sample/Demo.amx'), $report -Wait -PassThru
+            Get-Content $report | ForEach-Object { Say $_ }
+            if ($p.ExitCode -ne 0) { Say "installcheck=FAILED (裝好的程式自我檢查沒過)"; exit 1 }
+            Msi "/x `"$msi`" /qn"
+            Say "afterUninstall exe=$(Test-Path $exe) desktopShortcut=$(Test-Path $desktop) menuShortcut=$(Test-Path $menu)"
+            if ((Test-Path $exe) -or (Test-Path $desktop) -or (Test-Path $menu)) { Say "installcheck=FAILED (解除安裝沒清乾淨)"; exit 1 }
+          }
+          Msi "/i `"$msi`" /qn $desktopProp=`"`""
+          Check '不建桌面捷徑' $false
+          Msi "/i `"$msi`" /qn"
+          Check '預設（建桌面捷徑）' $true
+          Say 'installcheck=OK'
+
+      - name: Checksums
+        run: |
+          for f in ${{ matrix.installer }}; do
+            if command -v sha256sum >/dev/null; then sha256sum "$f"; else shasum -a 256 "$f"; fi
+          done | tee checksums-${{ matrix.name }}.txt
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7 (v7.0.2)
+        if: always()
+        with:
+          name: XenoBrex-${{ matrix.name }}
+          path: |
+            ${{ matrix.installer }}
+            checksums-${{ matrix.name }}.txt
+            selfcheck-${{ matrix.name }}.txt
+            installcheck-${{ matrix.name }}.txt
+            window-${{ matrix.name }}.png
+            dmg-window-${{ matrix.name }}.png
+            xb-app/build/shots/sample_*.png
+          retention-days: 14

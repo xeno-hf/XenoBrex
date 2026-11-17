@@ -1,0 +1,9 @@
+<Groups>
+<Group name="Fuel_Cal"><zh-TW>燃油</zh-TW><en-US>Fuel</en-US></Group>
+<Group name="Target_AFR"><zh-TW>目標空燃比</zh-TW><en-US>Target AFR</en-US></Group>
+<Group name="SA_Cal"><zh-TW>點火</zh-TW><en-US>Spark</en-US></Group>
+<Group name="RPM_Limiter"><zh-TW>轉速限制</zh-TW><en-US>Rev limiter</en-US></Group>
+<Group name="Warm_Up_Cal"><zh-TW>暖車</zh-TW><en-US>Warm-up</en-US></Group>
+<Group name="Sys_Cal"><zh-TW>系統</zh-TW><en-US>System</en-US></Group>
+<Group name="Others"><zh-TW>其他</zh-TW><en-US>Others</en-US></Group>
+</Groups>

@@ -1,0 +1,9 @@
+.gradle/
+build/
+.kotlin/
+local.properties
+*.iml
+.idea/
+# 金鑰、解密後的定義檔與調校檔絕不入庫
+keys.properties
+*.dat.xml

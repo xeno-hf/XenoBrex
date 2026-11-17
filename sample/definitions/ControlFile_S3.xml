@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ECUControlFile>
+<ControlFileSerial sn="1"/>
+<Parameters>
+<Tab name="Demo_Fuel_Map" absid="1"><Tinf>1,12,8,1,0,0,Dyna-2-RPM,LOAD-1,200,0,1,1,0,_,%,Fuel_Cal,0,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_</Tinf>
+<Ver c_version="7" status="Enable"><Model name="Demo" mid="10">1</Model></Ver>
+</Tab>
+<Tab name="Demo_RPM_Axis" absid="2"><Tinf>2,12,0,2,0,0,0,0,16000,0,100,1,0,_,rpm,Fuel_Cal,0,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_</Tinf>
+<Ver c_version="7" status="Enable"><Model name="Demo" mid="10">1</Model></Ver>
+</Tab>
+<Tab name="Demo_Target_AFR" absid="3"><Tinf>3,12,8,1,0,0,Dyna-2-RPM,LOAD-1,20,10,0.1,10,0,_,AFR,Target_AFR,1,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_</Tinf>
+<Ver c_version="7" status="Enable"><Model name="Demo" mid="10">1</Model></Ver>
+</Tab>
+<Tab name="Demo_Spark_Map" absid="4"><Tinf>4,12,8,1,0,0,Dyna-2-RPM,LOAD-1,60,-10,0.5,2,20,_,deg,SA_Cal,1,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_</Tinf>
+<Ver c_version="7" status="Enable"><Model name="Demo" mid="10">1</Model></Ver>
+</Tab>
+<Tab name="Demo_Rev_Limit" absid="5"><Tinf>5,0,0,2,0,0,0,0,16000,3000,100,1,0,_,rpm,RPM_Limiter,0,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_</Tinf>
+<Ver c_version="7" status="Enable"><Model name="Demo" mid="10">1</Model></Ver>
+</Tab>
+<Tab name="Demo_Warmup" absid="6"><Tinf>6,8,0,1,0,0,TEMP-1,0,200,50,1,1,0,_,%,Warm_Up_Cal,0,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_</Tinf>
+<Ver c_version="7" status="Enable"><Model name="Demo" mid="10">1</Model></Ver>
+</Tab>
+<Tab name="Demo_Switch" absid="7"><Tinf>7,0,0,1,0,0,0,0,1,0,1,1,0,_,_,Sys_Cal,0,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_</Tinf>
+<Ver c_version="7" status="Enable"><Model name="Demo" mid="10">1</Model></Ver>
+</Tab>
+<Tab name="Demo_Advanced" absid="8"><Tinf>8,4,0,1,0,0,0,0,255,0,1,1,0,_,_,Others,0,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_</Tinf>
+<Ver c_version="7" status="Enable"><Model name="Demo" mid="10">4</Model></Ver>
+</Tab>
+</Parameters>
+</ECUControlFile>

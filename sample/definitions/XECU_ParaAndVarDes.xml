@@ -1,0 +1,10 @@
+<Des><Table>
+<Tab absid="1"><zh-TW>示範用：橫軸轉速、縱軸負載的燃油修正（%）。</zh-TW><en-US>Demo_Fuel_Map</en-US></Tab>
+<Tab absid="2"><zh-TW>示範燃油表與示範點火表共用的轉速軸，可以改。</zh-TW><en-US>Demo_RPM_Axis</en-US></Tab>
+<Tab absid="3"><zh-TW>示範用：目標空燃比。</zh-TW><en-US>Demo_Target_AFR</en-US></Tab>
+<Tab absid="4"><zh-TW>示範用：點火提前角（度）。</zh-TW><en-US>Demo_Spark_Map</en-US></Tab>
+<Tab absid="5"><zh-TW>示範用：單一數值。</zh-TW><en-US>Demo_Rev_Limit</en-US></Tab>
+<Tab absid="6"><zh-TW>示範用：依水溫的一列補償。</zh-TW><en-US>Demo_Warmup</en-US></Tab>
+<Tab absid="7"><zh-TW>示範用：0／1 開關。</zh-TW><en-US>Demo_Switch</en-US></Tab>
+<Tab absid="8"><zh-TW>示範用：要打開「進階表」才看得到。</zh-TW><en-US>Demo_Advanced</en-US></Tab>
+</Table></Des>
