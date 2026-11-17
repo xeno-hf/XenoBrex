@@ -231,6 +231,8 @@ jobs:
             cp -R /Volumes/XenoBrexCheck/XenoBrex.app "$RUNNER_TEMP/Applications/"
             /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$RUNNER_TEMP/Applications/XenoBrex.app/Contents/Info.plist"
             "$RUNNER_TEMP/Applications/XenoBrex.app/Contents/MacOS/XenoBrex" --selfcheck "$PWD/sample/Demo.amx"
+            # 命令列工具 xbrex 跟著 app 一起裝（DMG 包的是已經含 xbrex 的 app）
+            "$RUNNER_TEMP/Applications/XenoBrex.app/Contents/MacOS/xbrex" --help
             hdiutil detach /Volumes/XenoBrexCheck
             echo "installcheck=OK"
           } 2>&1 | tee installcheck-${{ matrix.name }}.txt

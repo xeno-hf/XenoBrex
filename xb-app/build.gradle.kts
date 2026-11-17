@@ -126,7 +126,8 @@ val xbrexLauncher by tasks.registering {
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
     if (name == "packageMsi") freeArgs.add("--win-shortcut-prompt")
     dependsOn(xbrexLauncher)
-    freeArgs.addAll("--add-launcher", "xbrex=" + xbrexLauncher.get().outputs.files.singleFile.absolutePath)
+    // DMG 是拿 createDistributable 做好的 app（xbrex 已經在裡面）再包一層，jpackage 不接受這時再加執行檔
+    if (!name.endsWith("Dmg")) freeArgs.addAll("--add-launcher", "xbrex=" + xbrexLauncher.get().outputs.files.singleFile.absolutePath)
 }
 
 // 先把授權檔產生好，prepareAppResources 才複製得到。
