@@ -40,6 +40,10 @@ cd XenoBrex
 
 The installers are not signed; Windows and macOS will ask you to allow them on first launch.
 
+## Guides
+
+[Getting started](docs/guides/getting-started.en.md), [Connect to the ECU and tune live](docs/guides/live-tuning.en.md), [FAQ](docs/guides/faq.en.md). Questions and ideas are welcome in [Discussions](https://github.com/xeno-hf/XenoBrex/discussions).
+
 ## Definition files and keys
 
 XenoBrex ships no aRacer calibration definition files (ControlFile) or keys; use your own:

@@ -40,6 +40,10 @@ cd XenoBrex
 
 安裝檔沒有簽章，Windows 和 macOS 第一次開啟要手動放行。
 
+## 使用教學
+
+[第一次使用](docs/guides/getting-started.md)、[連線 ECU 即時調校](docs/guides/live-tuning.md)、[常見問題](docs/guides/faq.md)。問題與想法歡迎到 [Discussions](https://github.com/xeno-hf/XenoBrex/discussions)。
+
 ## 定義檔與金鑰
 
 XenoBrex 不附 aRacer 的校正定義檔（ControlFile）和金鑰，要用自己的：
