@@ -1,5 +1,6 @@
 package xb.container
 
+import xb.crypto.XbCrypto
 import xb.tune.Tune
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -7,7 +8,6 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.security.MessageDigest
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -60,9 +60,9 @@ internal object XbxArchive {
         return bytes
     }
 
-    fun digestSink(md: MessageDigest): OutputStream = object : OutputStream() {
-        override fun write(b: Int) { md.update(b.toByte()) }
-        override fun write(b: ByteArray, off: Int, len: Int) { md.update(b, off, len) }
+    fun digestSink(md: XbCrypto.Sha256): OutputStream = object : OutputStream() {
+        override fun write(b: Int) { md.update(byteArrayOf(b.toByte())) }
+        override fun write(b: ByteArray, off: Int, len: Int) { md.update(b, off, off + len) }
     }
 
     /** 讀 manifest 的 files 表：每個名字都要安全、每個值都是 64 位十六進位 SHA-256。 */
@@ -355,14 +355,15 @@ class XbxProject(
         fun fingerprint(file: xb.tune.TuneFile): String = fingerprint(file.tables.keys) { file.tables[it]?.rows }
 
         private fun fingerprint(ids: Collection<Int>, rowsOf: (Int) -> List<LongArray>?): String {
-            val md = MessageDigest.getInstance("SHA-256")
-            for (id in ids.sorted()) {
-                val rows = rowsOf(id) ?: continue
-                md.update("$id:".toByteArray())
-                md.update(rows.joinToString(";") { it.joinToString(",") }.toByteArray())
-                md.update('\n'.code.toByte())
+            XbCrypto.sha256Stream().use { md ->
+                for (id in ids.sorted()) {
+                    val rows = rowsOf(id) ?: continue
+                    md.update("$id:".toByteArray())
+                    md.update(rows.joinToString(";") { it.joinToString(",") }.toByteArray())
+                    md.update(byteArrayOf('\n'.code.toByte()))
+                }
+                return XbCrypto.hex(md.digest())
             }
-            return md.digest().joinToString("") { "%02x".format(it) }
         }
 
         /** 一張表目前的原始值副本（改之前先存，給 [changedCells] 比）。 */
@@ -380,7 +381,7 @@ class XbxProject(
             }
         }
 
-        fun sha256(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
+        fun sha256(b: ByteArray): String = XbCrypto.hex(XbCrypto.sha256(b))
 
         private fun lines(l: List<Map<String, Any?>>) = l.joinToString("") { Json.write(it) + "\n" }.toByteArray()
 

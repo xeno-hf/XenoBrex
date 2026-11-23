@@ -93,10 +93,10 @@ class PairingAndRevocationTest {
             val out = BufferedOutputStream(toServer)
             val m1 = SyncWire.writeMsg(out, linkedMapOf(
                 "op" to "pair", "id" to id, "name" to "TestPhone",
-                "epk" to SyncCrypto.hex(kp.public.encoded), "cn" to SyncCrypto.hex(cn),
+                "epk" to SyncCrypto.hex(kp.publicDer), "cn" to SyncCrypto.hex(cn),
             ))
             val (r, m2) = SyncWire.readMsg(fromServer)
-            val z = SyncCrypto.ecdh(kp, SyncCrypto.publicKey(SyncCrypto.unhex(r["epk"]!!)))
+            val z = SyncCrypto.ecdh(kp, SyncCrypto.unhex(r["epk"]!!))
             val ak = SyncCrypto.hmac(window.code.toByteArray(), z, SyncCrypto.sha256(m1 + m2))
             assertTrue(s.startPairing().open)
             SyncWire.writeMsg(out, mapOf("mac" to SyncCrypto.hex(SyncCrypto.hmac(ak, "client".toByteArray()))))

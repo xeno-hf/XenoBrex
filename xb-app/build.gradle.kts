@@ -10,13 +10,9 @@ plugins {
 
 val xbVersion: String = providers.gradleProperty("xb.version").get()
 
-// 授權文字：GitHub 工作樹用根目錄 LICENSE；本機原始碼樹退回 oss 的 GPL 全文。
+// 授權文字：根目錄的 LICENSE。
 val gplLicense = layout.file(providers.provider {
-    listOf(
-        rootProject.file("LICENSE"),
-        rootProject.file("../../oss/gpl-3.0.txt"),
-    ).firstOrNull { it.isFile }
-        ?: error("GPL license text not found (LICENSE or ../../oss/gpl-3.0.txt)")
+    rootProject.file("LICENSE").takeIf { it.isFile } ?: error("GPL license text not found (LICENSE)")
 })
 
 // 字型授權一定附上；NOTICE 在公開工作樹才有。

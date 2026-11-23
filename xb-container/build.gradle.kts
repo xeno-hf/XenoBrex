@@ -10,7 +10,10 @@ kotlin {
     jvm { compilerOptions.jvmTarget.set(JvmTarget.JVM_17) }
 
     sourceSets {
-        jvmMain.dependencies { api(project(":xb-tune")) }
+        jvmMain.dependencies {
+            api(project(":xb-tune"))
+            implementation(project(":xb-crypto"))
+        }
         jvmTest.dependencies { implementation(kotlin("test")) }
     }
 }

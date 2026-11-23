@@ -1,7 +1,7 @@
 package xb.container
 
+import xb.crypto.XbCrypto
 import java.io.File
-import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
@@ -118,9 +118,10 @@ class XblRide private constructor(
                     // 串流核對每個成員的實際內容；不把整份原始錄影讀進記憶體。
                     for ((name, want) in listed) {
                         val e = entries.getValue(name)
-                        val md = MessageDigest.getInstance("SHA-256")
-                        z.getInputStream(e).use { input -> budget.consume(input, XbxArchive.digestSink(md)) }
-                        val got = md.digest().joinToString("") { "%02x".format(it) }
+                        val got = XbCrypto.sha256Stream().use { md ->
+                            z.getInputStream(e).use { input -> budget.consume(input, XbxArchive.digestSink(md)) }
+                            XbCrypto.hex(md.digest())
+                        }
                         if (got != want) throw XbxException("$name does not match its checksum; the ride log is damaged")
                     }
                     return XblRide(file, manifest, entries.keys.toList(), listed, XbxProject.sha256(manifestBytes))

@@ -1,14 +1,12 @@
 package xb.container
 
+import xb.crypto.XbCrypto
 import java.io.File
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
-import javax.crypto.Cipher
-import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.SecretKeySpec
 
 class XTuneImportException(message: String) : Exception(message)
 
@@ -208,10 +206,7 @@ object XTunePackage {
     /** 快速篩：只解第一個區塊，看起來像 XML 的開頭才值得把整個檔案解開來確認。 */
     private fun plausible(key1: ByteArray, key2: ByteArray, block: ByteArray): Boolean {
         val dk = TuneContainer.pbkdf2Sha1(key1, key2, 1000, 32)
-        val plain = Cipher.getInstance("AES/CBC/NoPadding").run {
-            init(Cipher.DECRYPT_MODE, SecretKeySpec(dk.copyOfRange(0, 16), "AES"), IvParameterSpec(dk.copyOfRange(16, 32)))
-            doFinal(block)
-        }
+        val plain = XbCrypto.aesCbcDecrypt(dk.copyOfRange(0, 16), dk.copyOfRange(16, 32), block, padding = false)
         var i = 0
         if (plain[0] == 0xEF.toByte() && plain[1] == 0xBB.toByte() && plain[2] == 0xBF.toByte()) i = 3
         return plain[i] == '<'.code.toByte()

@@ -1,5 +1,6 @@
 package xb.container
 
+import xb.crypto.XbCrypto
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -9,7 +10,6 @@ import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import javax.xml.XMLConstants
 import java.net.HttpURLConnection
 import java.net.URI
-import java.security.MessageDigest
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
@@ -88,7 +88,7 @@ object OfficialStock {
     internal fun cacheFile(dir: File, name: String): File = try { SafeFiles.resolveBasename(dir.toPath(), name).toFile() }
         catch (e: IllegalArgumentException) { throw NoBaselineException("Unsafe stock filename") }
 
-    private fun md5(b: ByteArray) = MessageDigest.getInstance("MD5").digest(b).joinToString("") { "%02X".format(it) }
+    private fun md5(b: ByteArray) = XbCrypto.hex(XbCrypto.md5(b), upper = true)
 
     fun fetchList(source: Source, container: TuneContainer): QbList {
         val raw = try { get(SERVER + source.folder + source.list) }

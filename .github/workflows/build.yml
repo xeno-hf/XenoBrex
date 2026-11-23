@@ -1,13 +1,12 @@
 name: Build
 
-# 每次推上來或開 PR：在 Linux 上建置並跑測試。
+# 每次推上來或開 PR：在 Linux、macOS、Windows 上建置並跑測試；macOS 另外連結 iOS 實機版、在 iOS 模擬器裡跑共用核心的測試。
 # 手動執行（Run workflow）：另外在 macOS、Windows、Linux 上各打包一份，並實際裝起來檢查。
 #   macOS   .dmg（打開後把 XenoBrex 拖進 Applications）
 #   Windows .msi（安裝時可以選要不要建桌面捷徑）
 #   Linux   .tar.gz（解開後跑 install.sh；或直接在原始碼裡跑 install.sh）
 on:
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -24,8 +23,15 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-26, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 (v7.0.1)
 
@@ -37,16 +43,42 @@ jobs:
 
       # 中文字型：畫面出圖要用，沒有的話中文會變成方框。
       - name: Fonts
+        if: runner.os == 'Linux'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
 
+      # Kotlin 2.4.21 測過的是 Xcode 26.4，機器預設的比較新。
+      - name: Xcode
+        if: runner.os == 'macOS'
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.4.app
+          xcodebuild -version
+
+      # macOS 上這一步也會把共用的調校檔核心和加密編成 iOS 的版本。
       - name: Build and test
-        run: ./gradlew --console=plain build
+        run: ./gradlew --console=plain build -x iosSimulatorArm64Test
+
+      # 連結 iOS 實機版的測試程式：CryptoKit 的連結設定有問題的話在這一步才會出錯。
+      - name: iOS device link
+        if: runner.os == 'macOS'
+        run: ./gradlew --console=plain :xb-tune:linkDebugTestIosArm64 :xb-crypto:linkDebugTestIosArm64
+
+      # 共用的調校檔核心和加密在 iOS 模擬器裡跑它們自己的測試（加密用標準測試向量，結果要跟電腦版一樣）。
+      - name: Core tests on the iOS simulator
+        if: runner.os == 'macOS'
+        run: |
+          ./gradlew --console=plain :xb-tune:iosSimulatorArm64Test :xb-crypto:iosSimulatorArm64Test
+          # 每個模組至少要真的跑過一個測試（全被略過或沒產生報告就算失敗）
+          for m in xb-tune xb-crypto; do
+            n=$(grep -ho '<testsuite [^>]*>' $m/build/test-results/iosSimulatorArm64Test/*.xml | awk '{t=$0; sub(/.* tests="/,"",t); sub(/".*/,"",t); k=0; s=$0; if (s ~ / skipped="/) { sub(/.* skipped="/,"",s); sub(/".*/,"",s); k=s }; n+=t-k} END {print n+0}')
+            echo "$m: $n tests ran"
+            [ "$n" -gt 0 ]
+          done
 
       - name: Shots and test reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7 (v7.0.2)
         with:
-          name: test-linux
+          name: test-${{ runner.os }}
           path: |
             xb-app/build/shots/*.png
             */build/reports/tests/
@@ -54,6 +86,7 @@ jobs:
 
   package:
     if: github.event_name == 'workflow_dispatch'
+    needs: test
     strategy:
       fail-fast: false
       matrix:
@@ -91,10 +124,16 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk
 
-      # macOS 上這一步也會把共用的調校檔核心編成 iOS 的版本。
-      - name: Build and test
-        run: ./gradlew --console=plain build
+      # 跟 test 用同一版 Xcode（這台是新開的機器，預設的比較新）。
+      - name: Xcode
+        if: runner.os == 'macOS'
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.4.app
+          xcodebuild -version
 
+      # 測試已經在上面的 test 跑過，這裡只建置。
+      - name: Build
+        run: ./gradlew --console=plain build -x check
 
       # createDistributable：還沒包成安裝檔的程式資料夾，下面的自我檢查和開視窗用它。
       # macOS 的 hdiutil 在 GitHub 的機器上偶爾會失敗：失敗時先印出 jpackage 的紀錄，再試一次。
