@@ -53,7 +53,9 @@ class LiveRecordingCapFinalizeTest {
 
     private fun capped(bigEvents: Boolean) = runBlocking {
         val pack = DefinitionPack(defsDir(), null)
-        val logs = ArrayList<String>()
+        // 伺服器執行緒在寫、測試在讀
+        val logs = java.util.Collections.synchronizedList(ArrayList<String>())
+        fun logged(text: String) = synchronized(logs) { logs.any { text in it } }
         val server = XbSync(
             SyncStore(File(work, "sync")), { pack }, { File(work, "rides") }, "XenoBrex test",
             limits = RideLimits(liveBytes = 512L shl 10, liveMs = 60_000),
@@ -88,9 +90,13 @@ class LiveRecordingCapFinalizeTest {
             assertNotNull(dir, "recording did not start")
             val session = dir
             val metaFile = File(session, "meta.json")
-            assertFalse(metaFile.readText().contains("\"stopped_wall_ms\""), "剛開始不該是收檔版")
+            // 用 NIO 讀（Windows 上開檔時允許刪除／改名）
+            fun readMeta() = Files.readString(metaFile.toPath())
+            assertFalse(readMeta().contains("\"stopped_wall_ms\""), "剛開始不該是收檔版")
 
-            // 一直送輪，直到收檔路徑把 meta 換成有 stopped_wall_ms 的那份
+            // 一直送輪，直到伺服器記下副本停了。收檔時 meta 會被換掉：送的期間不去開 meta.json，
+            // 免得 Windows 上開著的檔擋到換檔（或剛好碰到換檔中間沒有 meta.json 的那一下）。
+            // 伺服器寫完收檔的 meta 才記這行，所以看到它之後 meta 已經是最後一份
             var i = 0L
             val deadline = System.currentTimeMillis() + 60_000
             while (System.currentTimeMillis() < deadline) {
@@ -99,18 +105,21 @@ class LiveRecordingCapFinalizeTest {
                 i++
                 if (i % 200 == 0L) {
                     Thread.sleep(15)
-                    if (metaFile.readText().contains("\"stopped_wall_ms\"")) break
+                    if (logged("live copy stopped")) break
                 }
             }
-            assertTrue(metaFile.readText().contains("\"stopped_wall_ms\""), "到達上限後 meta 沒有收檔：${metaFile.readText()}")
-            assertTrue(logs.any { "size limit" in it }, "不是撞到資料上限停下來的：$logs")
-            assertTrue(logs.none { "did not finalize" in it }, "收檔有錯：$logs")
+            val stopLog = synchronized(logs) { logs.toList() }
+            assertTrue(stopLog.any { "live copy stopped" in it }, "副本沒有停：$stopLog")
+            assertTrue(stopLog.any { "size limit" in it }, "不是撞到資料上限停下來的：$stopLog")
+            assertTrue(stopLog.none { "did not finalize" in it }, "收檔有錯：$stopLog")
+            val stoppedMeta = readMeta()
+            assertTrue(stoppedMeta.contains("\"stopped_wall_ms\""), "到達上限後 meta 沒有收檔：$stoppedMeta")
 
             up.close(3_000)
             val t1 = System.currentTimeMillis()
             while (server.live.value?.online != false && System.currentTimeMillis() - t1 < 8_000) Thread.sleep(20)
 
-            val meta = metaFile.readText()
+            val meta = readMeta()
             assertTrue("\"rounds\": " in meta, meta)
             for (name in listOf("frames.rxraw", "events.jsonl", "decoded.loga")) {
                 val hex = Regex("\"$name\":\"([0-9a-f]{64})\"").find(meta)?.groupValues?.get(1)
