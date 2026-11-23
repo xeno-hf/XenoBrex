@@ -64,7 +64,7 @@ object MapDefs {
                 "x" to x, "y" to y,
             )
         }
-        if (tables.isEmpty()) throw NoDefinitions("No map tables for $mapType C$c")
+        if (tables.isEmpty()) throw NoDefinitions("No map tables for $mapType${c?.let { " C$it" } ?: ""}")
         val axes = axisTables.values.map { a ->
             linkedMapOf("id" to a.absId, "cols" to a.storedColumns, "bytes" to a.cellBytes,
                 "gain" to a.gain, "offset" to a.offset, "min" to a.min, "max" to a.max, "dec" to a.decimals)

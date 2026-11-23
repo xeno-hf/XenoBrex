@@ -85,6 +85,10 @@ internal fun pack(): DefinitionPack {
     return DefinitionPack(dir, keys)
 }
 
+/** 定義檔資料夾不在就是 null；給 sync serve 用，不能像 [pack] 一樣結束整個程式。 */
+internal fun packOrNull(): DefinitionPack? =
+    xb.container.XbPaths.definitionsDir().takeIf { it.isDirectory }?.let { DefinitionPack(it, keys) }
+
 /** 使用者的金鑰；沒有設就是 null，只能開未加密的檔案。 */
 internal val keys by lazy { KeyStore.load()?.container }
 

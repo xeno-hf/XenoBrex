@@ -44,7 +44,7 @@ internal fun sync(args: List<String>) {
         "serve" -> {
             val bind = args.valueOf("--bind")?.let(InetAddress::getByName)
             val port = args.valueOf("--port")?.toIntOrNull() ?: SyncWire.DEFAULT_PORT
-            val s = XbSync(store(), { runCatching { pack() }.getOrNull() }, XbPaths::ridesDir, appName(), { keys }) { line ->
+            val s = XbSync(store(), { runCatching { packOrNull() }.getOrNull() }, XbPaths::ridesDir, appName(), { keys }) { line ->
                 println(line); AppLog.write("sync", line)
             }
             s.start(bind, port)
