@@ -139,6 +139,8 @@ tasks.register<Tar>("packageTarGz") {
     archiveFileName.set("$top.tar.gz")
     destinationDirectory.set(layout.buildDirectory.dir("dist"))
     compression = Compression.GZIP
+    // Gradle 9 起壓縮檔預設把權限統一成 644／755，install.sh 與啟動程式會失去執行權限：改回沿用檔案系統上的權限。
+    useFileSystemPermissions()
     into(top) {
         from(layout.buildDirectory.dir("compose/binaries/main/app")) { include("XenoBrex/**") }
         from(rootProject.file("install.sh"))
